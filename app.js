@@ -21,26 +21,35 @@ var express = require('express'),
   urlParse  = require('url'),
   extend    = require('util')._extend,
   watson    = require('watson-developer-cloud'),
-  Q         = require('q');
+  Q         = require('q'),
+  Twitter   = require('twitter');
 
 // Bootstrap application settings
 require('./config/express')(app);
 
 var toneAnalyzer = watson.tone_analyzer({
   isStreaming: false,
-  username: '<username>',
-  password: '<password>',
+  username: 'YOUR_USERNAME',
+  password: 'YOUR_PASSWORD',
   version: 'v3-beta',
   version_date: '2016-02-11'
 });
 
-var alchemyApiKey = { api_key: process.env.ALCHEMY_API_KEY || '<your api key>'};
+var alchemyApiKey = {api_key: 'YOUR_API_KEY'};
 var alchemyLanguage = watson.alchemy_language(alchemyApiKey);
+var alchemyVision = watson.alchemy_vision(alchemyApiKey);
 var alchemyDataNews = watson.alchemy_data_news(alchemyApiKey);
 
 var extractText = Q.nfbind(alchemyLanguage.text.bind(alchemyLanguage));
+var getImageKeywords = Q.nfbind(alchemyVision.getImageKeywords.bind(alchemyVision));
 var getTone = Q.nfbind(toneAnalyzer.tone.bind(toneAnalyzer));
 var getNews = Q.nfbind(alchemyDataNews.getNews.bind(alchemyDataNews));
+
+var twitterSearch = new Twitter({
+  consumer_key: 'YOUR_CONSUMER_KEY',
+  consumer_secret: 'YOUR_CONSUMER_SECRET',
+  bearer_token: 'YOUR_BEARER_TOKEN'
+});
 
 function entityQuery(entity) {
   return '\|text=' + entity + ',type=company,relevance=>0.25\|';
@@ -51,6 +60,53 @@ function keywordSentiment(keyword, sentiment) {
     (sentiment ? ',sentiment.type=' + sentiment : '') +
     ',relevance=>0.7\|';
 }
+
+app.get('/api/images', function(req, res, next) {
+  var keywordsMap={};
+  twitterSearch.get('search/tweets', {q: req.query.entity + ' filter:images', include_entities: true, count: 5000}, function(error, tweets){
+    var statuses = tweets.statuses
+    
+    statuses.forEach(function(status, index, array){
+      if (status.entities.media) {
+        var params = {
+          url: status.entities.media[0].media_url
+        };
+        console.log(params);
+        getImageKeywords(params).then(function(tags) {
+          tags.imageKeywords.forEach(function(keyword) {
+            var key = keyword.text.toUpperCase();
+            if (key != 'NO_TAGS') {
+              if (keywordsMap[key]) {
+                keywordsMap[key].count += 1;
+              } else {
+                keywordsMap[key] = {
+                  keyword: key,
+                  count: 1,
+                };
+              }
+            }
+          });
+
+          if (index === array.length - 1) {
+            var sortedKeywords = Object.keys(keywordsMap)
+            .map(function(key) {
+              return keywordsMap[key];
+            })
+            .sort(function(a, b) {
+              return b.count - a.count;
+            });
+
+
+            res.json(sortedKeywords.slice(0, req.query.count));
+          }     
+        });
+
+      }    
+    });
+
+  });
+});
+
 app.get('/api/sentiment', function (req, res, next) {
   var params = {
     start: req.query.start,

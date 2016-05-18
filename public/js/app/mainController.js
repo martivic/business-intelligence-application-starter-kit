@@ -322,6 +322,26 @@
       topicsDetailContainer.style.display = '';
     }.bind(this));
 
+    var imagesLoadingContainer = document.getElementById('images-loading-container');
+    var imagesDetailContainer = document.getElementById('images-details-container');
+
+    imagesLoadingContainer.style.display = '';
+    imagesDetailContainer.style.display = 'none';
+
+    var fetchImagesPromise = this.model.fetchImages();
+
+    fetchImagesPromise.then(function() {
+
+      var imagesChart = new app.ImagesBallChart(
+          this._createDummyContainer('images-chart-container'), this.model.data)
+        
+      this.widgets.push(imagesChart);
+
+      imagesLoadingContainer.style.display = 'none';
+      imagesDetailContainer.style.display = '';
+
+    }.bind(this));
+
     this._changeSections(true);
   };
 

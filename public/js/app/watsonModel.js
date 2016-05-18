@@ -242,6 +242,33 @@
 
   };
 
+ app.WatsonModel.prototype.fetchImages = function() {
+
+    var imagesPromise = this._sendRequest(this._getServiceURL('images'), {
+      count: 10
+    });
+    var self = this;
+    return new Promise(function(resolve, reject) {
+      imagesPromise.then(function(results) {
+            results.forEach(function(result, index) {
+              result.label = result.keyword.replace(/(?!IBM\b)\b\w+/g,
+                function(text) {
+                  return text.charAt(0).toUpperCase() + text.substring(1).toLowerCase();
+                });
+            });
+            results.sort(function(item1, item2) {
+              return item2.count - item1.count;
+            });
+            self.data.keywords = results;
+            resolve(self.data.keywords);
+          })
+          .catch(function(reason) {
+            reject(reason);
+          });
+    });
+
+  };
+
   app.WatsonModel.prototype._fetchActualCount = function(sourceObj) {
     var actualCountPromise = this._sendRequest(this._getServiceURL('sources'), {
       source: sourceObj.sourceId
